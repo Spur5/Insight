@@ -109,14 +109,20 @@ class WheelRepository
                 oo.contracts,
                 oo.premium,
                 oo.status AS option_status,
+                oo.option_strategy_id,
+                oo.leg_type,
                 b.name AS broker_name,
                 b.color_hex AS broker_color
+                os.strategy_name,
+                os.status AS strategy_status
             FROM
                 wheel_cycles wc
             LEFT JOIN
                 option_orders oo ON wc.id = oo.wheel_cycle_id
             LEFT JOIN
                 brokers b ON oo.broker_id = b.id
+            LEFT JOIN
+                option_strategies os ON oo.option_strategy_id = os.id
             WHERE
                 wc.status = 'active'
             ORDER BY
