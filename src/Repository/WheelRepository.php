@@ -88,20 +88,17 @@ class WheelRepository
     }
 
     /**
-     * Fetches active wheel cycles with their associated options and stocks.
-     * This is a simplified example; a real implementation might involve more complex joins or views.
+     * Fetches all relevant option orders for the dashboard display,
+     * including associated wheel cycle and strategy data.
      *
-     * @return array An array of active wheel cycles, each potentially with linked orders.
+     * @return array A flat array of option orders with joined data.
      */
-    public function getActiveWheelCycles(): array
+    public function getDashboardOptionsData(): array
     {
         $query = "
             SELECT
-                wc.id AS cycle_id,
-                wc.ticker AS cycle_ticker,
-                wc.assigned_shares,
-                wc.status AS cycle_status,
                 oo.id AS option_id,
+                oo.ticker AS cycle_ticker, -- Using option_orders ticker as the primary ticker for display
                 oo.type AS option_type,
                 oo.contract_type,
                 oo.strike_price,
@@ -111,22 +108,33 @@ class WheelRepository
                 oo.status AS option_status,
                 oo.option_strategy_id,
                 oo.leg_type,
+                oo.wheel_cycle_id AS cycle_id, -- Alias for consistency with JS expectation
                 b.name AS broker_name,
-                b.color_hex AS broker_color
+                b.color_hex AS broker_color,
                 os.strategy_name,
-                os.status AS strategy_status
+                os.status AS strategy_status,
+                wc.assigned_shares,
+                wc.status AS cycle_status
             FROM
-                wheel_cycles wc
-            LEFT JOIN
-                option_orders oo ON wc.id = oo.wheel_cycle_id
+                option_orders oo
             LEFT JOIN
                 brokers b ON oo.broker_id = b.id
             LEFT JOIN
                 option_strategies os ON oo.option_strategy_id = os.id
+            LEFT JOIN
+                wheel_cycles wc ON oo.wheel_cycle_id = wc.id
             WHERE
-                wc.status = 'active'
+                oo.status IN ('OPEN', 'FILLED', 'ASSIGNED') -- Only show active/open option orders
+                AND (
+                    os.id IS NULL -- Standalone option (not part of a strategy)
+                    OR os.status = 'OPEN' -- Or part of an open strategy
+                )
+                AND (
+                    wc.id IS NULL -- Not part of a wheel cycle
+                    OR wc.status = 'active' -- Or part of an active wheel cycle
+                )
             ORDER BY
-                wc.ticker, oo.expiration_date;
+                oo.ticker, oo.expiration_date;
         ";
         $stmt = $this->db->query($query);
         return $stmt->fetchAll();

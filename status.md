@@ -22,11 +22,8 @@
   - **Database:** Initialized tables (`brokers`, `wheel_cycles`, `stock_orders`, `option_orders`). Restrained `assigned_shares` strictly to 100-share lots via SQL `CHECK` constraints.
   - **Engine Logic:** Deployed `WheelMath::calculateNetCostBasis` utilizing a strict **Independence Guard** rule to ignore surplus option contracts.
   - **Automation Hooks:** Implemented `WheelRepository::logOptionAssignment` to cleanly execute Option A auto-termination/archiving of cycles upon short call assignment.
-  - **UI Grid:** Built a high-density, real-time command center interface sorting rows dynamically in-memory.
-
-### [2026-05-27] - Phase 2: Strategy Complex Grouping Layer (Active)
-- **Goal:** Introduce relational parent containers for multi-leg option structures (Spreads, Iron Condors) with collapsible UI accordions and automated state validation tracking.
-- **In Progress:** Migrating schema definitions, drafting `StrategyRepository`, upgrading `dashboard.js` rendering to daisyUI 5 compliance.
+  - **UI Grid:** Built a high-density, real-time command center interface sorting rows dynamically in-memory (Short ITM Alert -> Lowest DTE Heatmap -> Alphabetical) to protect the UI thread from external API latency.
+- **Technical Note:** Stripped all documentation-level path aliases (`@`). All backend scripts strictly utilize native relative paths (`__DIR__ . '/../../src/...'`) to prevent WSL folder structure hallucinations.
 
 ## VERIFIED DIRECTORY MAPPING
 ```text
@@ -34,17 +31,17 @@
 ├── config/
 │   └── database.php
 ├── src/
-│   ├── Engine/
+│   ├── Engine/ # Contains core business logic
 │   │   └── WheelMath.php
-│   └── Repository/
-│       ├── StrategyRepository.php  # (New) Multi-leg transaction logic
+│   └── Repository/ # Contains database interaction logic
+│       ├── StrategyRepository.php
 │       └── WheelRepository.php
-└── public/
-    ├── api/
-    │   ├── market_data.php
-    │   ├── log_transaction.php
-    │   └── log_strategy.php       # (New) Multi-leg processing endpoint
-    ├── assets/
-    │   └── js/
-    │       └── dashboard.js
-    └── index.php
+├── api/ # API endpoints for frontend interaction
+│   ├── market_data.php
+│   ├── log_strategy.php
+│   └── log_transaction.php
+├── assets/ # Static assets like JavaScript and CSS
+│   └── js/
+│       ├── QuickFill.js
+│       └── dashboard.js
+└── index.php # Main application entry point

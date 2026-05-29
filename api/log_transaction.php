@@ -1,9 +1,9 @@
-<?php // /var/www/html/@public/api/log_transaction.php
+<?php // /var/www/html/api/log_transaction.php
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../src/Repository/WheelRepository.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../src/Repository/WheelRepository.php';
 
 use Insight\Repository\WheelRepository;
 

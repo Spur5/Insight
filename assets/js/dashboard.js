@@ -11,8 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const expirationDate = new Date(expirationDateStr);
         expirationDate.setHours(0, 0, 0, 0); // Normalize to start of day
         const diffTime = expirationDate.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return Math.max(0, diffDays); // DTE cannot be negative
+        let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        // If expiration is today (diffDays is 0), set DTE to 1, otherwise use calculated diffDays.
+        // DTE cannot be negative.
+        if (diffDays === 0 && expirationDate.getTime() >= today.getTime()) {
+            return 1;
+        }
+        return Math.max(0, diffDays);
     };
 
     // Function to determine if a short option is In The Money (ITM)
@@ -84,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const underlyingPrice = tickerMarketData.underlying_price;
 
             // Calculate individual option metrics
+            option.strike_price = parseFloat(option.strike_price); // Ensure strike_price is a number
+            option.premium = parseFloat(option.premium);           // Ensure premium is a number
+            option.contracts = parseInt(option.contracts, 10);     // Ensure contracts is an integer
             const dte = calculateDTE(option.expiration_date);
             const { pnl_dollar, pnl_percent, current_premium } = calculateUnrealizedPnL(option, tickerMarketData);
             const isITM = isShortOptionITM(option, underlyingPrice);
@@ -211,7 +220,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rowClass = option.is_itm ? 'itm-alert' : '';
 
                 const row = document.createElement('tr');
-                row.classList.add(rowClass);
+                if (rowClass) { // Only add class if it's not empty
+                    row.classList.add(rowClass);
+                }
                 row.innerHTML = `
                     <td>${option.cycle_ticker}</td>
                     <td><span class="badge" style="background-color:${option.broker_color};">${option.broker_name}</span></td>
@@ -237,7 +248,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rowClass = strategy.strategy_is_itm ? 'itm-alert' : '';
 
                 const strategyRow = document.createElement('tr');
-                strategyRow.classList.add(rowClass);
+                if (rowClass) { // Only add class if it's not empty
+                    strategyRow.classList.add(rowClass);
+                }
                 strategyRow.innerHTML = `
                     <td colspan="15" class="p-0"> <!-- colspan to span entire table width -->
                         <div class="collapse collapse-arrow bg-base-200 border border-base-content/10">

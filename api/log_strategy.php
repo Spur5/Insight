@@ -1,10 +1,10 @@
-<?php // /var/www/html/public/api/log_strategy.php
+<?php // /var/www/html/api/log_strategy.php
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../src/Repository/StrategyRepository.php';
-require_once __DIR__ . '/../../src/Repository/WheelRepository.php'; // Needed for getBrokerByName
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../src/Repository/StrategyRepository.php';
+require_once __DIR__ . '/../src/Repository/WheelRepository.php';
 
 use Insight\Repository\StrategyRepository;
 use Insight\Repository\WheelRepository; // Use WheelRepository to get broker ID
