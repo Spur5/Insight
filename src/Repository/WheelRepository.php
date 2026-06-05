@@ -99,7 +99,7 @@ class WheelRepository
             SELECT
                 oo.id AS option_id,
                 oo.ticker AS cycle_ticker, -- Using option_orders ticker as the primary ticker for display
-                oo.type AS option_type,
+                oo.type, -- Changed from AS option_type to just type
                 oo.contract_type,
                 oo.strike_price,
                 oo.expiration_date,
@@ -110,6 +110,7 @@ class WheelRepository
                 oo.leg_type,
                 oo.wheel_cycle_id AS cycle_id, -- Alias for consistency with JS expectation
                 b.name AS broker_name,
+                b.id AS broker_id,
                 b.color_hex AS broker_color,
                 os.strategy_name,
                 os.status AS strategy_status,
@@ -126,6 +127,7 @@ class WheelRepository
             WHERE
                 oo.status IN ('OPEN', 'FILLED', 'ASSIGNED') -- Only show active/open option orders
                 AND (
+                    oo.type NOT IN ('BUY_TO_CLOSE', 'SELL_TO_CLOSE') AND -- Exclude closing transactions
                     os.id IS NULL -- Standalone option (not part of a strategy)
                     OR os.status = 'OPEN' -- Or part of an open strategy
                 )
@@ -149,11 +151,13 @@ class WheelRepository
      */
     public function insertOptionOrder(array $data): int
     {
-        $sql = "INSERT INTO option_orders (wheel_cycle_id, broker_id, ticker, type, contract_type, strike_price, expiration_date, contracts, premium, status)
-                VALUES (:wheel_cycle_id, :broker_id, :ticker, :type, :contract_type, :strike_price, :expiration_date, :contracts, :premium, :status)";
+        $sql = "INSERT INTO option_orders (wheel_cycle_id, option_strategy_id, leg_type, broker_id, ticker, type, contract_type, strike_price, expiration_date, contracts, premium, status)
+                VALUES (:wheel_cycle_id, :option_strategy_id, :leg_type, :broker_id, :ticker, :type, :contract_type, :strike_price, :expiration_date, :contracts, :premium, :status)";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':wheel_cycle_id' => $data['wheel_cycle_id'] ?? null,
+            ':option_strategy_id' => $data['option_strategy_id'] ?? null,
+            ':leg_type' => $data['leg_type'] ?? null,
             ':broker_id' => $data['broker_id'],
             ':ticker' => $data['ticker'],
             ':type' => $data['type'],
@@ -165,6 +169,32 @@ class WheelRepository
             ':status' => $data['status'] ?? 'FILLED'
         ]);
         return (int)$this->db->lastInsertId();
+    }
+
+    /**
+     * Fetches a single option order by its ID.
+     *
+     * @param int $optionOrderId The ID of the option order.
+     * @return array|false The option order data or false if not found.
+     */
+    public function getOptionOrderById(int $optionOrderId): array|false
+    {
+        $stmt = $this->db->prepare("SELECT * FROM option_orders WHERE id = :id");
+        $stmt->execute([':id' => $optionOrderId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Updates the status of an option order.
+     *
+     * @param int $optionOrderId The ID of the option order to update.
+     * @param string $newStatus The new status (e.g., 'EXPIRED', 'CLOSED', 'ASSIGNED').
+     * @return bool True on success, false on failure.
+     */
+    public function updateOptionOrderStatus(int $optionOrderId, string $newStatus): bool
+    {
+        $stmt = $this->db->prepare("UPDATE option_orders SET status = :status WHERE id = :id");
+        return $stmt->execute([':status' => $newStatus, ':id' => $optionOrderId]);
     }
 
     /**

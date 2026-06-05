@@ -120,6 +120,10 @@
                 </select>
               </div>
               <div>
+                <label class="label text-xs">Contracts</label>
+                <input type="number" id="single_contracts" class="input input-sm w-full" placeholder="1" />
+              </div>
+              <div>
                 <label class="label text-xs">Contract Type</label>
                 <select id="single_contract_type" class="select select-sm w-full">
                   <option value="PUT">PUT</option>
@@ -127,28 +131,16 @@
                 </select>
               </div>
               <div>
-                <label class="label text-xs">Strike Price</label>
-                <input type="number" step="0.01" id="single_strike" class="input input-sm w-full" placeholder="0.00" />
-              </div>
-              <div>
                 <label class="label text-xs">Expiration Date</label>
                 <input type="date" id="single_expiration" class="input input-sm w-full" />
               </div>
               <div>
-                <label class="label text-xs">Contracts</label>
-                <input type="number" id="single_contracts" class="input input-sm w-full" placeholder="1" />
+                <label class="label text-xs">Strike Price</label>
+                <input type="number" step="0.01" id="single_strike" class="input input-sm w-full" placeholder="0.00" />
               </div>
               <div>
                 <label class="label text-xs">Premium per Contract</label>
                 <input type="number" step="0.01" id="single_premium" class="input input-sm w-full" placeholder="0.00" />
-              </div>
-              <div>
-                <label class="label text-xs">Status State</label>
-                <select id="single_status" class="select select-sm w-full">
-                  <option value="FILLED">FILLED</option>
-                  <option value="OPEN">OPEN</option>
-                  <option value="ASSIGNED">ASSIGNED</option>
-                </select>
               </div>
               <div>
                 <label class="label text-xs">Wheel Cycle Link ID</label>

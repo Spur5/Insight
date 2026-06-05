@@ -60,6 +60,8 @@ try {
 
     $optionData = [
         'wheel_cycle_id' => $wheelCycleId,
+        'option_strategy_id' => null, // Not part of a strategy for single leg
+        'leg_type' => null, // Not a specific leg type for single leg
         'broker_id' => $brokerId,
         'ticker' => $input['ticker'],
         'type' => $input['type'], // e.g., 'SELL_TO_OPEN'

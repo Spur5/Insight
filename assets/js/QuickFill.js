@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const singleExpiration = document.getElementById('single_expiration');
     const singleContracts = document.getElementById('single_contracts');
     const singlePremium = document.getElementById('single_premium');
-    const singleStatus = document.getElementById('single_status');
     const singleWheelId = document.getElementById('single_wheel_id');
 
     let legCounter = 0; // To ensure unique IDs for strategy legs
@@ -71,9 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
             contract_type: legElement.querySelector(`#${prefix}contract_type`).value,
             strike_price: parseFloat(legElement.querySelector(`#${prefix}strike`).value),
             expiration_date: legElement.querySelector(`#${prefix}expiration`).value,
-            contracts: parseInt(legElement.querySelector(`#${prefix}contracts`).value, 10),
+            contracts: parseInt(legElement.querySelector(`#${prefix}contracts`).value, 10) || 1, // Ensure contracts is a number, default to 1 if empty
             premium: parseFloat(legElement.querySelector(`#${prefix}premium`).value),
-            status: legElement.querySelector(`#${prefix}status`).value,
+            status: 'FILLED', // Hardcode status to 'FILLED'
             leg_type: legElement.querySelector(`#${prefix}leg_type`) ? legElement.querySelector(`#${prefix}leg_type`).value : null, // Only for strategy legs
             wheel_cycle_id: legElement.querySelector(`#${prefix}wheel_id`) ? parseInt(legElement.querySelector(`#${prefix}wheel_id`).value, 10) || null : null // Only for single leg
         };
@@ -111,9 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             singleContractType.setAttribute('required', 'true');
             singleStrike.setAttribute('required', 'true');
             singleExpiration.setAttribute('required', 'true');
-            singleContracts.setAttribute('required', 'true');
             singlePremium.setAttribute('required', 'true');
-            singleStatus.setAttribute('required', 'true');
             singleExpiration.value = getNextFriday(); // Set default expiration date
             // Remove required for strategy name
             strategyNameSelect.removeAttribute('required');
@@ -137,9 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
 singleContractType.removeAttribute('required');
 singleStrike.removeAttribute('required');
 singleExpiration.removeAttribute('required');
-singleContracts.removeAttribute('required');
 singlePremium.removeAttribute('required');
-singleStatus.removeAttribute('required');
             // Set required for strategy name
             strategyNameSelect.setAttribute('required', 'true');
         }
@@ -171,6 +166,10 @@ singleStatus.removeAttribute('required');
                     </select>
                 </div>
                 <div>
+                    <label class="label text-xs">Contracts</label>
+                    <input type="number" id="leg_${index}_contracts" class="input input-sm w-full" placeholder="1" />
+                </div>
+                <div>
                     <label class="label text-xs">Contract Type</label>
                     <select id="leg_${index}_contract_type" class="select select-sm w-full" required>
                         <option value="PUT">PUT</option>
@@ -178,28 +177,16 @@ singleStatus.removeAttribute('required');
                     </select>
                 </div>
                 <div>
-                    <label class="label text-xs">Strike Price</label>
-                    <input type="number" step="0.01" id="leg_${index}_strike" class="input input-sm w-full" placeholder="0.00" required />
-                </div>
-                <div>
                     <label class="label text-xs">Expiration Date</label>
                     <input type="date" id="leg_${index}_expiration" class="input input-sm w-full" value="${getNextFriday()}" required />
                 </div>
                 <div>
-                    <label class="label text-xs">Contracts</label>
-                    <input type="number" id="leg_${index}_contracts" class="input input-sm w-full" placeholder="1" required />
+                    <label class="label text-xs">Strike Price</label>
+                    <input type="number" step="0.01" id="leg_${index}_strike" class="input input-sm w-full" placeholder="0.00" required />
                 </div>
                 <div>
                     <label class="label text-xs">Premium per Contract</label>
                     <input type="number" step="0.01" id="leg_${index}_premium" class="input input-sm w-full" placeholder="0.00" required />
-                </div>
-                <div>
-                    <label class="label text-xs">Status State</label>
-                    <select id="leg_${index}_status" class="select select-sm w-full" required>
-                        <option value="FILLED">FILLED</option>
-                        <option value="OPEN">OPEN</option>
-                        <option value="ASSIGNED">ASSIGNED</option>
-                    </select>
                 </div>
                 <div>
                     <label class="label text-xs">Leg Type</label>
@@ -335,7 +322,6 @@ singleStatus.removeAttribute('required');
             const result = await response.json();
 
             if (result.success) {
-                showNotification(result.message, 'success');
                 resetForm();
                 // Reload the page to refresh the dashboard data
                 location.reload();

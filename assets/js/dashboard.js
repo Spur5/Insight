@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="${dteClass}">${option.dte}</td>
                     <td>${option.contracts}</td>
                     <td>$${option.premium.toFixed(2)}</td>
-                    <td>${option.status}</td>
+                    <td>${option.option_status}</td>
                     <td>$${typeof option.underlying_price === 'number' ? option.underlying_price.toFixed(2) : 'N/A'}</td>
                     <td>N/A</td> <!-- Strategy -->
                     <td>N/A</td> <!-- Leg Type -->
@@ -240,6 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="${pnlClass}">$${option.pnl_dollar.toFixed(2)}</td>
                     <td class="${pnlClass}">${option.pnl_percent.toFixed(2)}%</td>
                 `;
+                row.innerHTML += `<td><div class="flex gap-1 justify-end"><button class="btn btn-xs btn-outline btn-success action-close" data-id="${option.option_id}">Close</button><button class="btn btn-xs btn-outline btn-info action-expire" data-id="${option.option_id}">Expire</button>${option.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${option.option_id}" data-broker="${option.broker_id}">Assign</button>` : ''}</div></td>`;
                 dashboardTableBody.appendChild(row);
             } else if (item.type === 'strategy') { // Render multi-leg strategies as daisyUI 5 collapse/accordion
                 const strategy = item.data;
@@ -252,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     strategyRow.classList.add(rowClass);
                 }
                 strategyRow.innerHTML = `
-                    <td colspan="15" class="p-0"> <!-- colspan to span entire table width -->
+                    <td colspan="16" class="p-0"> <!-- colspan to span entire table width -->
                         <div class="collapse collapse-arrow bg-base-200 border border-base-content/10">
                             <input type="checkbox" class="peer" />
                             <div class="collapse-title text-xl font-medium flex items-center">
@@ -281,6 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 <th>Current Premium</th>
                                                 <th>Unrealized P&L ($)</th>
                                                 <th>Unrealized P&L (%)</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -298,12 +300,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                                         <td class="${legDteClass}">${leg.dte}</td>
                                                         <td>${leg.contracts}</td>
                                                         <td>$${leg.premium.toFixed(2)}</td>
-                                                        <td>${leg.status}</td>
+                                                        <td>${leg.option_status}</td>
                                                         <td>$${typeof leg.underlying_price === 'number' ? leg.underlying_price.toFixed(2) : 'N/A'}</td>
                                                         <td>${leg.leg_type}</td>
                                                         <td>$${leg.current_premium.toFixed(2)}</td>
                                                         <td class="${legPnlClass}">$${leg.pnl_dollar.toFixed(2)}</td>
                                                         <td class="${legPnlClass}">${leg.pnl_percent.toFixed(2)}%</td>
+                                                        <td><div class="flex gap-1 justify-end"><button class="btn btn-xs btn-outline btn-success action-close" data-id="${leg.option_id}">Close</button><button class="btn btn-xs btn-outline btn-info action-expire" data-id="${leg.option_id}">Expire</button>${leg.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${leg.option_id}" data-broker="${leg.broker_id}">Assign</button>` : ''}</div></td>
                                                     </tr>
                                                 `;
                                             }).join('')}
@@ -319,8 +322,78 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // Function to handle action button clicks
+    const handleAction = async (optionId, action) => {
+        let exitPremium = null;
+        if (action === 'CLOSE') {
+            const premiumInput = prompt('Enter exit premium (e.g., 0.50 for $50):');
+            if (premiumInput === null || premiumInput.trim() === '') {
+                alert('Close action cancelled. Exit premium is required.');
+                return;
+            }
+            exitPremium = parseFloat(premiumInput);
+            if (isNaN(exitPremium)) {
+                alert('Invalid exit premium. Please enter a number.');
+                return;
+            }
+        }
+
+        const payload = {
+            option_id: optionId,
+            action: action,
+            exit_premium: exitPremium
+        };
+
+        try {
+            const response = await fetch('/api/update_leg_status.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(result.message);
+                // Re-fetch and re-render dashboard data
+                await fetchMarketData();
+            } else {
+                alert(`Error: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('Error updating option status:', error);
+            alert('An error occurred while updating option status.');
+        }
+    };
+
+    // Event delegation for action buttons
+    dashboardTableBody.addEventListener('click', (event) => {
+        const target = event.target;
+        const optionId = parseInt(target.dataset.id, 10);
+        if (target.classList.contains('action-close')) {
+            handleAction(optionId, 'CLOSE');
+        } else if (target.classList.contains('action-expire')) {
+            handleAction(optionId, 'EXPIRE');
+        } else if (target.classList.contains('action-assign')) {
+            handleAction(optionId, 'ASSIGN');
+        }
+    });
+
     // Fetch market data and update UI
     const fetchMarketData = async () => {
+        // First, fetch the latest options data from the server
+        let latestOptionsData = [];
+        try {
+            const optionsResponse = await fetch('/api/get_dashboard_data.php?_t=' + new Date().getTime()); // Add cache-buster
+            latestOptionsData = await optionsResponse.json();
+            currentOptionsData = latestOptionsData; // Update the global currentOptionsData
+        } catch (error) {
+            console.error('Error fetching latest options data:', error);
+            // Continue with potentially stale data or empty if initial fetch failed
+        }
+
         const uniqueTickers = [...new Set(currentOptionsData.map(option => option.cycle_ticker))];
         if (uniqueTickers.length === 0) {
             renderTable([]); // Render empty if no data
@@ -328,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch(`/api/market_data.php?tickers=${uniqueTickers.join(',')}`);
+            const response = await fetch(`/api/market_data.php?tickers=${uniqueTickers.join(',')}&_t=${new Date().getTime()}`); // Add cache-buster
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
