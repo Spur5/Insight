@@ -25,6 +25,16 @@
   - **UI Grid:** Built a high-density, real-time command center interface sorting rows dynamically in-memory (Short ITM Alert -> Lowest DTE Heatmap -> Alphabetical) to protect the UI thread from external API latency.
 - **Technical Note:** Stripped all documentation-level path aliases (`@`). All backend scripts strictly utilize native relative paths (`__DIR__ . '/../../src/...'`) to prevent WSL folder structure hallucinations.
 
+### [2026-05-28] - Phase 3: Frictionless Quick-Fill UI Modal — COMPLETED
+- **Completed:** Embedded dual-pipeline entry modal UI served natively from http://localhost. Streamlined entries to drop the status selector and automatically default to 'FILLED' on ledger execution.
+
+### [2026-05-28] - Phase 4: Inline Dashboard Grid Actions — ACTIVE
+- **Goal:** Add inline grid execution action buttons to close, expire, or process option assignments from table rows, handling exit pricing inputs and firing automated wheel transaction hooks.
+- **In Progress:** Generating `api/update_leg_status.php` and updating click listeners in `dashboard.js`.
+
+### [2026-06-07] - Phase 4: Symmetrical Persistent Table Grouping & Dynamic Sorting
+- **Completed:** Restructured dashboard grid to implement a persistent Master-Child visual bracket layout. Added interactive header sorting (Ticker, Exp. Date, P/L $) that sorts rows atomically as single blocks, preventing strategy leg fracturing. Integrated inline lifecycle control buttons (`Close`, `Expire`, `Assign`) with native text prompts.
+
 ## VERIFIED DIRECTORY MAPPING
 ```text
 /var/www/html/

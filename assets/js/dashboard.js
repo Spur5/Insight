@@ -1,14 +1,25 @@
-// /var/www/html/public/assets/js/dashboard.js
-
 document.addEventListener('DOMContentLoaded', () => {
     const dashboardTableBody = document.getElementById('dashboard-table-body');
     let currentOptionsData = initialOptionsData || []; // Use initial data from PHP
+    let currentSortKey = 'default';
+    let currentSortDir = 'asc';
+    let lastMarketData = {};
+
+    // Function to format date to 'd M y' (e.g., 26 May 24)
+    const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        const [year, month, day] = dateStr.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+    };
 
     // Function to calculate Days To Expiration (DTE)
     const calculateDTE = (expirationDateStr) => { // Strict Logic Constraint 1
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Normalize to start of day
-        const expirationDate = new Date(expirationDateStr);
+        // Parse components manually to ensure local timezone consistency
+        const [y, m, d] = expirationDateStr.split('-').map(Number);
+        const expirationDate = new Date(y, m - 1, d);
         expirationDate.setHours(0, 0, 0, 0); // Normalize to start of day
         const diffTime = expirationDate.getTime() - today.getTime();
         let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -115,9 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         strategy_name: option.strategy_name,
                         status: option.strategy_status,
                         legs: [],
+                        min_expiration: option.expiration_date,
                         // Aggregate metrics, to be calculated below
                         overall_pnl_dollar: 0,
                         overall_pnl_percent: 0,
+                        overall_current_premium: 0,
                         strategy_dte: Infinity, // Min DTE for strategy
                         strategy_is_itm: false, // True if any short leg is ITM
                         total_original_premium_for_pnl: 0 // Sum of premiums received for short, paid for long
@@ -132,9 +145,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calculate aggregate metrics for strategies (Strict Logic Constraint 3)
         const processedStrategies = Object.values(strategies).map(strategy => {
             let overallPnLDollar = 0;
+            let overallCurrentPremium = 0;
             let strategyMinDTE = Infinity;
             let strategyHasITMLeg = false;
             let totalOriginalPremiumForPnl = 0; // For P&L % calculation
+            let minExpDate = strategy.legs[0].expiration_date;
 
             strategy.legs.forEach(leg => {
                 const legOriginalPremiumTotal = leg.premium * leg.contracts * 100;
@@ -148,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     overallPnLDollar += (legCurrentPremiumTotal - legOriginalPremiumTotal);
                 }
 
+                // Accumulate total current dollar value for the complex
+                overallCurrentPremium += legCurrentPremiumTotal;
+
                 // Update strategy DTE (minimum of all legs)
                 if (leg.dte < strategyMinDTE) {
                     strategyMinDTE = leg.dte;
@@ -157,13 +175,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (leg.is_itm) {
                     strategyHasITMLeg = true;
                 }
+
+                // Track earliest expiration
+                if (new Date(leg.expiration_date) < new Date(minExpDate)) {
+                    minExpDate = leg.expiration_date;
+                }
             });
 
             strategy.overall_pnl_dollar = overallPnLDollar;
             strategy.overall_pnl_percent = totalOriginalPremiumForPnl !== 0 ? (overallPnLDollar / totalOriginalPremiumForPnl) * 100 : 0;
+            strategy.overall_current_premium = overallCurrentPremium;
             strategy.strategy_dte = strategyMinDTE;
             strategy.strategy_is_itm = strategyHasITMLeg;
             strategy.total_original_premium_for_pnl = totalOriginalPremiumForPnl; // Store for potential display or further calculations
+            strategy.min_expiration = minExpDate;
 
             return strategy;
         });
@@ -183,32 +208,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const aData = a.data;
             const bData = b.data;
 
-            // Determine ITM status for sorting (Strategy or Single Option level)
-            const aIsITM = a.type === 'option' ? aData.is_itm : aData.strategy_is_itm;
-            const bIsITM = b.type === 'option' ? bData.is_itm : bData.strategy_is_itm;
+            if (currentSortKey === 'default') {
+                // Default Heatmap Sorting (ITM -> DTE -> Ticker)
+                const aIsITM = a.type === 'option' ? aData.is_itm : aData.strategy_is_itm;
+                const bIsITM = b.type === 'option' ? bData.is_itm : bData.strategy_is_itm;
+                const aDTE = a.type === 'option' ? aData.dte : aData.strategy_dte;
+                const bDTE = b.type === 'option' ? bData.dte : bData.strategy_dte;
+                const aTicker = aData.ticker || aData.cycle_ticker;
+                const bTicker = bData.ticker || bData.cycle_ticker;
 
-            // Determine DTE for sorting (Strategy or Single Option level)
-            const aDTE = a.type === 'option' ? aData.dte : aData.strategy_dte;
-            const bDTE = b.type === 'option' ? bData.dte : bData.strategy_dte;
+                if (aIsITM && !bIsITM) return -1;
+                if (!aIsITM && bIsITM) return 1;
+                if (aDTE !== bDTE) return aDTE - bDTE;
+                return aTicker.localeCompare(bTicker);
+            }
 
-            // Determine Ticker for sorting
-            const aTicker = aData.ticker || aData.cycle_ticker; // Strategy has 'ticker', option has 'cycle_ticker'
-            const bTicker = bData.ticker || bData.cycle_ticker;
+            let valA, valB;
+            if (currentSortKey === 'ticker') {
+                valA = aData.ticker || aData.cycle_ticker;
+                valB = bData.ticker || bData.cycle_ticker;
+            } else if (currentSortKey === 'expiration') {
+                valA = a.type === 'option' ? aData.expiration_date : aData.min_expiration;
+                valB = b.type === 'option' ? bData.expiration_date : bData.min_expiration;
+            } else if (currentSortKey === 'pnl') {
+                valA = a.type === 'option' ? aData.pnl_dollar : aData.overall_pnl_dollar;
+                valB = b.type === 'option' ? bData.pnl_dollar : bData.overall_pnl_dollar;
+            }
 
-            // 1. Short ITM Alert (Strategies or Single Options)
-            if (aIsITM && !bIsITM) return -1;
-            if (!aIsITM && bIsITM) return 1;
-
-            // 2. Lowest Days to Expiration (DTE)
-            if (aDTE !== bDTE) return aDTE - bDTE;
-
-            // 3. Ticker Alphabetical
-            return aTicker.localeCompare(bTicker);
+            let result = 0;
+            if (typeof valA === 'string') {
+                result = valA.localeCompare(valB);
+            } else {
+                result = (valA || 0) - (valB || 0);
+            }
+            return currentSortDir === 'asc' ? result : -result;
         });
         return combinedList;
     };
 
-    // Strict Logic Constraint 4: Function to render/re-render the table with daisyUI 5 accordion
+    // Strict Logic Constraint 4: Function to render/re-render the table with Persistent Symmetrical Grouping
     const renderTable = (combinedList) => {
         dashboardTableBody.innerHTML = ''; // Clear existing rows
 
@@ -220,104 +258,91 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rowClass = option.is_itm ? 'itm-alert' : '';
 
                 const row = document.createElement('tr');
-                if (rowClass) { // Only add class if it's not empty
-                    row.classList.add(rowClass);
-                }
+                if (rowClass) row.classList.add(rowClass);
+                
                 row.innerHTML = `
-                    <td>${option.cycle_ticker}</td>
-                    <td><span class="badge" style="background-color:${option.broker_color};">${option.broker_name}</span></td>
-                    <td>${option.type} ${option.contract_type}</td>
-                    <td>$${option.strike_price.toFixed(2)}</td>
-                    <td>${option.expiration_date}</td>
-                    <td class="${dteClass}">${option.dte}</td>
-                    <td>${option.contracts}</td>
-                    <td>$${option.premium.toFixed(2)}</td>
-                    <td>${option.option_status}</td>
-                    <td>$${typeof option.underlying_price === 'number' ? option.underlying_price.toFixed(2) : 'N/A'}</td>
-                    <td>N/A</td> <!-- Strategy -->
-                    <td>N/A</td> <!-- Leg Type -->
-                    <td>$${option.current_premium.toFixed(2)}</td>
-                    <td class="${pnlClass}">$${option.pnl_dollar.toFixed(2)}</td>
-                    <td class="${pnlClass}">${option.pnl_percent.toFixed(2)}%</td>
+                    <td class="text-center">${option.cycle_ticker}</td>
+                    <td class="text-center">${option.type} ${option.contract_type}</td>
+                    <td class="text-center">${option.contracts}</td>
+                    <td class="text-center">$${option.strike_price.toFixed(2)}</td>
+                    <td class="text-center">${formatDate(option.expiration_date)}</td>
+                    <td class="text-center ${dteClass}">${option.dte}</td>
+                    <td class="text-center">${option.broker_name}</td>
+                    <td class="text-center">$${option.premium.toFixed(2)}</td>
+                    <td class="text-center">$${option.current_premium.toFixed(2)}</td>
+                    <td class="text-center">${option.option_status}</td>
+                    <td class="text-center">$${typeof option.underlying_price === 'number' ? option.underlying_price.toFixed(2) : 'N/A'}</td>
+                    <td class="text-center">N/A</td> <!-- Strategy -->
+                    <td class="text-center">N/A</td> <!-- Leg Type -->
+                    <td class="text-center ${pnlClass}">$${option.pnl_dollar.toFixed(2)}</td>
+                    <td class="text-center ${pnlClass}">${option.pnl_percent.toFixed(2)}%</td>
+                    <td class="text-left"><div class="flex gap-1 justify-start"><button class="btn btn-xs btn-outline btn-success action-close" data-id="${option.option_id}">Close</button><button class="btn btn-xs btn-outline btn-info action-expire" data-id="${option.option_id}">Expire</button>${option.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${option.option_id}" data-broker="${option.broker_id}">Assign</button>` : ''}</div></td>
                 `;
-                row.innerHTML += `<td><div class="flex gap-1 justify-end"><button class="btn btn-xs btn-outline btn-success action-close" data-id="${option.option_id}">Close</button><button class="btn btn-xs btn-outline btn-info action-expire" data-id="${option.option_id}">Expire</button>${option.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${option.option_id}" data-broker="${option.broker_id}">Assign</button>` : ''}</div></td>`;
                 dashboardTableBody.appendChild(row);
-            } else if (item.type === 'strategy') { // Render multi-leg strategies as daisyUI 5 collapse/accordion
+            } else if (item.type === 'strategy') { 
                 const strategy = item.data;
                 const dteClass = strategy.strategy_dte < 3 ? 'dte-red' : (strategy.strategy_dte < 7 ? 'dte-yellow' : '');
                 const pnlClass = strategy.overall_pnl_dollar < 0 ? 'text-error' : 'text-success';
                 const rowClass = strategy.strategy_is_itm ? 'itm-alert' : '';
 
-                const strategyRow = document.createElement('tr');
-                if (rowClass) { // Only add class if it's not empty
-                    strategyRow.classList.add(rowClass);
-                }
-                strategyRow.innerHTML = `
-                    <td colspan="16" class="p-0"> <!-- colspan to span entire table width -->
-                        <div class="collapse collapse-arrow bg-base-200 border border-base-content/10">
-                            <input type="checkbox" class="peer" />
-                            <div class="collapse-title text-xl font-medium flex items-center">
-                                <span class="flex-1">
-                                    <span class="font-bold text-lg">${strategy.ticker}</span> - ${strategy.strategy_name} (${strategy.status})
-                                </span>
-                                <span class="text-sm mr-4">DTE: <span class="${dteClass}">${strategy.strategy_dte}</span></span>
-                                <span class="text-sm mr-4">P&L: <span class="${pnlClass}">$${strategy.overall_pnl_dollar.toFixed(2)} (${strategy.overall_pnl_percent.toFixed(2)}%)</span></span>
-                            </div>
-                            <div class="collapse-content">
-                                <div class="overflow-x-auto mt-2">
-                                    <table class="table table-xs w-full table-zebra">
-                                        <thead>
-                                            <tr>
-                                                <th></th> <!-- Indent column -->
-                                                <th>Broker</th>
-                                                <th>Type</th>
-                                                <th>Strike</th>
-                                                <th>Exp. Date</th>
-                                                <th>DTE</th>
-                                                <th>Contracts</th>
-                                                <th>Premium</th>
-                                                <th>Status</th>
-                                                <th>Underlying Price</th>
-                                                <th>Leg Type</th>
-                                                <th>Current Premium</th>
-                                                <th>Unrealized P&L ($)</th>
-                                                <th>Unrealized P&L (%)</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${strategy.legs.map(leg => {
-                                                const legDteClass = leg.dte < 3 ? 'dte-red' : (leg.dte < 7 ? 'dte-yellow' : '');
-                                                const legPnlClass = leg.pnl_dollar < 0 ? 'text-error' : 'text-success';
-                                                const legRowClass = leg.is_itm ? 'itm-alert' : '';
-                                                return `
-                                                    <tr class="${legRowClass}">
-                                                        <td></td> <!-- Indent -->
-                                                        <td><span class="badge" style="background-color:${leg.broker_color};">${leg.broker_name}</span></td>
-                                                        <td>${leg.type} ${leg.contract_type}</td>
-                                                        <td>$${leg.strike_price.toFixed(2)}</td>
-                                                        <td>${leg.expiration_date}</td>
-                                                        <td class="${legDteClass}">${leg.dte}</td>
-                                                        <td>${leg.contracts}</td>
-                                                        <td>$${leg.premium.toFixed(2)}</td>
-                                                        <td>${leg.option_status}</td>
-                                                        <td>$${typeof leg.underlying_price === 'number' ? leg.underlying_price.toFixed(2) : 'N/A'}</td>
-                                                        <td>${leg.leg_type}</td>
-                                                        <td>$${leg.current_premium.toFixed(2)}</td>
-                                                        <td class="${legPnlClass}">$${leg.pnl_dollar.toFixed(2)}</td>
-                                                        <td class="${legPnlClass}">${leg.pnl_percent.toFixed(2)}%</td>
-                                                        <td><div class="flex gap-1 justify-end"><button class="btn btn-xs btn-outline btn-success action-close" data-id="${leg.option_id}">Close</button><button class="btn btn-xs btn-outline btn-info action-expire" data-id="${leg.option_id}">Expire</button>${leg.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${leg.option_id}" data-broker="${leg.broker_id}">Assign</button>` : ''}</div></td>
-                                                    </tr>
-                                                `;
-                                            }).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </td>
+                // --- Step 2: The Group Header Row ---
+                const masterRow = document.createElement('tr');
+                masterRow.className = `bg-base-300/80 font-bold text-xs text-base-content ${rowClass}`;
+                masterRow.innerHTML = `
+                    <td class="text-center border-l-4 border-primary">${strategy.ticker}</td>
+                    <td class="text-center font-black uppercase text-primary">${strategy.strategy_name}</td>
+                    <td class="text-center">${strategy.legs[0].contracts}</td>
+                    <td class="text-center">—</td>
+                    <td class="text-center">${formatDate(strategy.min_expiration)}</td>
+                    <td class="text-center ${dteClass}">${strategy.strategy_dte}</td>
+                    <td class="text-center">${strategy.legs[0].broker_name}</td>
+                    <td class="text-center">$${(strategy.total_original_premium_for_pnl / 100).toFixed(2)}</td>
+                    <td class="text-center">$${(strategy.overall_current_premium / 100).toFixed(2)}</td>
+                    <td class="text-center">${strategy.status}</td>
+                    <td class="text-center">—</td>
+                    <td class="text-center">—</td>
+                    <td class="text-center">—</td>
+                    <td class="text-center ${pnlClass}">$${strategy.overall_pnl_dollar.toFixed(2)}</td>
+                    <td class="text-center ${pnlClass}">${strategy.overall_pnl_percent.toFixed(2)}%</td>
+                    <td class="text-center"></td>
                 `;
-                dashboardTableBody.appendChild(strategyRow);
+                dashboardTableBody.appendChild(masterRow);
+
+                // --- Step 2: The Connected Leg Rows ---
+                strategy.legs.forEach(leg => {
+                    const legDteClass = leg.dte < 3 ? 'dte-red' : (leg.dte < 7 ? 'dte-yellow' : '');
+                    const legPnlClass = leg.pnl_dollar < 0 ? 'text-error' : 'text-success';
+                    const legRowClass = leg.is_itm ? 'itm-alert' : '';
+                    
+                    const legRow = document.createElement('tr');
+                    legRow.className = `bg-base-200/40 text-base-content/80 text-xs italic ${legRowClass}`;
+                    
+                    legRow.innerHTML = `
+                        <td class="text-center pl-4 border-l-4 border-primary/30">└─ ${leg.cycle_ticker}</td>
+                        <td class="text-center">${leg.type} ${leg.contract_type}</td>
+                        <td class="text-center">${leg.contracts}</td>
+                        <td class="text-center">$${leg.strike_price.toFixed(2)}</td>
+                        <td class="text-center">${formatDate(leg.expiration_date)}</td>
+                        <td class="text-center ${legDteClass}">${leg.dte}</td>
+                        <td class="text-center">${leg.broker_name}</td>
+                        <td class="text-center">$${leg.premium.toFixed(2)}</td>
+                        <td class="text-center">$${leg.current_premium.toFixed(2)}</td>
+                        <td class="text-center">${leg.option_status}</td>
+                        <td class="text-center">$${typeof leg.underlying_price === 'number' ? leg.underlying_price.toFixed(2) : 'N/A'}</td>
+                        <td class="text-center">—</td>
+                        <td class="text-center">${leg.leg_type}</td>
+                        <td class="text-center ${legPnlClass}">$${leg.pnl_dollar.toFixed(2)}</td>
+                        <td class="text-center ${legPnlClass}">${leg.pnl_percent.toFixed(2)}%</td>
+                        <td class="text-left">
+                            <div class="flex gap-1 justify-start">
+                                <button class="btn btn-xs btn-outline btn-success action-close" data-id="${leg.option_id}">Close</button>
+                                <button class="btn btn-xs btn-outline btn-info action-expire" data-id="${leg.option_id}">Expire</button>
+                                ${leg.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${leg.option_id}" data-broker="${leg.broker_id}">Assign</button>` : ''}
+                            </div>
+                        </td>
+                    `;
+                    dashboardTableBody.appendChild(legRow);
+                });
             }
         });
     };
@@ -368,9 +393,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Event delegation for action buttons
+    // --- Step 2: Initialize Interactive Sorting Listeners ---
+    document.querySelectorAll('.sortable-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const key = header.dataset.sortKey;
+            if (currentSortKey === key) {
+                currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortKey = key;
+                currentSortDir = 'asc';
+            }
+
+            // Update Indicators
+            document.querySelectorAll('.sort-indicator').forEach(span => {
+                span.textContent = '↕';
+                span.className = 'sort-indicator text-xs text-base-content/30';
+            });
+            const indicator = header.querySelector('.sort-indicator');
+            indicator.textContent = currentSortDir === 'asc' ? '↑' : '↓';
+            indicator.className = 'sort-indicator text-xs text-primary font-bold';
+
+            // Re-sort and Render
+            const combinedList = processOptionsData(currentOptionsData, lastMarketData);
+            const sortedList = sortCombinedList(combinedList);
+            renderTable(sortedList);
+        });
+    });
+
+    // --- Step 3: Re-Bind Interactive Inline Listeners ---
     dashboardTableBody.addEventListener('click', (event) => {
         const target = event.target;
+
         const optionId = parseInt(target.dataset.id, 10);
         if (target.classList.contains('action-close')) {
             handleAction(optionId, 'CLOSE');
@@ -405,18 +458,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            const marketData = await response.json();
-            console.log('Fetched market data:', marketData);
+            lastMarketData = await response.json();
+            console.log('Fetched market data:', lastMarketData);
 
             // Process, sort, and render
-            const combinedList = processOptionsData(currentOptionsData, marketData);
+            const combinedList = processOptionsData(currentOptionsData, lastMarketData);
             const sortedList = sortCombinedList(combinedList);
             renderTable(sortedList);
 
         } catch (error) {
             console.error('Error fetching market data:', error);
+            lastMarketData = {};
             // Fallback: process and render with existing data if API fails (P&L will be based on original premium)
-            const combinedList = processOptionsData(currentOptionsData, {}); // Pass empty marketData
+            const combinedList = processOptionsData(currentOptionsData, lastMarketData); 
             const sortedList = sortCombinedList(combinedList);
             renderTable(sortedList);
         }
@@ -424,7 +478,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial fetch and render
     fetchMarketData();
-
-    // Refresh market data every 30 seconds (example)
-    // setInterval(fetchMarketData, 30000); 
 });
