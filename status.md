@@ -28,12 +28,18 @@
 ### [2026-05-28] - Phase 3: Frictionless Quick-Fill UI Modal — COMPLETED
 - **Completed:** Embedded dual-pipeline entry modal UI served natively from http://localhost. Streamlined entries to drop the status selector and automatically default to 'FILLED' on ledger execution.
 
-### [2026-05-28] - Phase 4: Inline Dashboard Grid Actions — ACTIVE
+### [2026-05-28] - Phase 4: Inline Dashboard Grid Actions — COMPLETED
 - **Goal:** Add inline grid execution action buttons to close, expire, or process option assignments from table rows, handling exit pricing inputs and firing automated wheel transaction hooks.
 - **In Progress:** Generating `api/update_leg_status.php` and updating click listeners in `dashboard.js`.
 
 ### [2026-06-07] - Phase 4: Symmetrical Persistent Table Grouping & Dynamic Sorting
 - **Completed:** Restructured dashboard grid to implement a persistent Master-Child visual bracket layout. Added interactive header sorting (Ticker, Exp. Date, P/L $) that sorts rows atomically as single blocks, preventing strategy leg fracturing. Integrated inline lifecycle control buttons (`Close`, `Expire`, `Assign`) with native text prompts.
+
+### [2026-06-11] - Phase 5: Schema Normalization & Form Multiplexer Overhaul — COMPLETED
+- **Database Normalization:** Completely removed the redundant `leg_type` database column across `option_orders`, `WheelRepository`, and `StrategyRepository`.
+- **Dynamic Runtime Engine:** Updated `assets/js/dashboard.js` to dynamically compute functional leg options roles (`SHORT_CALL`, `LONG_PUT`, etc.) on the fly using combined `type` and `contract_type` states. Implemented human-readable daisyUI presentation status badges.
+- **Visual Grid Cleanup:** Stripped out the dead, redundant `Strategy` and `Leg Type` column paths from the dashboard table layout to maximize horizontal screen real estate.
+- **Form Multiplexing:** Collapsed entry layouts to remove mode tabs and the manual `Wheel Link ID` entry block. Form defaults to a high-contrast single row flex card, dynamically exposing strategy names if extra legs are added, and choosing safe single-trade vs multi-leg JSON endpoint routing on submission.
 
 ## VERIFIED DIRECTORY MAPPING
 ```text

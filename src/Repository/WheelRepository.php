@@ -107,7 +107,6 @@ class WheelRepository
                 oo.premium,
                 oo.status AS option_status,
                 oo.option_strategy_id,
-                oo.leg_type,
                 oo.wheel_cycle_id AS cycle_id, -- Alias for consistency with JS expectation
                 b.name AS broker_name,
                 b.id AS broker_id,
@@ -151,13 +150,12 @@ class WheelRepository
      */
     public function insertOptionOrder(array $data): int
     {
-        $sql = "INSERT INTO option_orders (wheel_cycle_id, option_strategy_id, leg_type, broker_id, ticker, type, contract_type, strike_price, expiration_date, contracts, premium, status)
-                VALUES (:wheel_cycle_id, :option_strategy_id, :leg_type, :broker_id, :ticker, :type, :contract_type, :strike_price, :expiration_date, :contracts, :premium, :status)";
+        $sql = "INSERT INTO option_orders (wheel_cycle_id, option_strategy_id, broker_id, ticker, type, contract_type, strike_price, expiration_date, contracts, premium, status)
+                VALUES (:wheel_cycle_id, :option_strategy_id, :broker_id, :ticker, :type, :contract_type, :strike_price, :expiration_date, :contracts, :premium, :status)";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':wheel_cycle_id' => $data['wheel_cycle_id'] ?? null,
             ':option_strategy_id' => $data['option_strategy_id'] ?? null,
-            ':leg_type' => $data['leg_type'] ?? null,
             ':broker_id' => $data['broker_id'],
             ':ticker' => $data['ticker'],
             ':type' => $data['type'],
@@ -226,5 +224,15 @@ class WheelRepository
         $stmt = $this->db->prepare("SELECT id FROM brokers WHERE name = :name");
         $stmt->execute([':name' => $name]);
         return $stmt->fetch();
+    }
+
+    /**
+     * Fetches all active wheel cycles for selection mapping.
+     * @return array
+     */
+    public function getActiveWheelCycles(): array
+    {
+        $stmt = $this->db->query("SELECT id, ticker, assigned_shares FROM wheel_cycles WHERE status = 'active' ORDER BY ticker ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

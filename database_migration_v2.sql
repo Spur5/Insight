@@ -23,4 +23,5 @@ ALTER TABLE `option_orders`
 ALTER TABLE `option_orders` MODIFY COLUMN `status` ENUM('OPEN', 'FILLED', 'CLOSED', 'EXPIRED', 'ASSIGNED', 'CANCELLED') NOT NULL DEFAULT 'FILLED';
 
 -- Note: If you have existing data, you might need to run a data migration
--- to populate option_strategy_id and leg_type for existing option_orders.
+
+ALTER TABLE `option_orders` DROP COLUMN `leg_type`;

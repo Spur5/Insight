@@ -24,7 +24,7 @@ class StrategyRepository
      * @param string $strategyName The name of the strategy (e.g., 'Vertical Spread').
      * @param array $legsData An array of associative arrays, each representing an option leg.
      *                        Expected keys for each leg: 'type', 'contract_type', 'strike_price',
-     *                        'expiration_date', 'contracts', 'premium', 'leg_type', 'status'.
+     *                        'expiration_date', 'contracts', 'premium', 'status'.
      * @param int $brokerId The ID of the broker for all legs.
      * @return int The ID of the newly inserted option strategy.
      * @throws PDOException If a database error occurs.
@@ -51,15 +51,15 @@ class StrategyRepository
 
             // 2. Insert individual option legs
             $optionOrderSql = "INSERT INTO option_orders 
-                               (wheel_cycle_id, option_strategy_id, leg_type, broker_id, ticker, type, contract_type, strike_price, expiration_date, contracts, premium, status)
-                               VALUES (:wheel_cycle_id, :option_strategy_id, :leg_type, :broker_id, :ticker, :type, :contract_type, :strike_price, :expiration_date, :contracts, :premium, :status)";
+                               (wheel_cycle_id, option_strategy_id, broker_id, ticker, type, contract_type, strike_price, expiration_date, contracts, premium, status)
+                               VALUES (:wheel_cycle_id, :option_strategy_id, :broker_id, :ticker, :type, :contract_type, :strike_price, :expiration_date, :contracts, :premium, :status)";
             $optionOrderStmt = $this->db->prepare($optionOrderSql);
 
             foreach ($legsData as $leg) {
                 // Basic validation for leg data
                 $requiredLegFields = [
                     'type', 'contract_type', 'strike_price', 'expiration_date',
-                    'contracts', 'premium', 'leg_type', 'status'
+                    'contracts', 'premium', 'status'
                 ];
                 foreach ($requiredLegFields as $field) {
                     if (!isset($leg[$field])) {
@@ -70,7 +70,6 @@ class StrategyRepository
                 $optionOrderStmt->execute([
                     ':wheel_cycle_id' => $leg['wheel_cycle_id'] ?? null, // Strategies can still be part of a wheel cycle
                     ':option_strategy_id' => $strategyId,
-                    ':leg_type' => $leg['leg_type'],
                     ':broker_id' => $brokerId,
                     ':ticker' => $ticker, // Ticker from parent strategy
                     ':type' => $leg['type'],

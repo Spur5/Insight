@@ -5,6 +5,44 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSortDir = 'asc';
     let lastMarketData = {};
 
+    // Data Constants & Label Mapping Lookups
+    // Data Constants & Label Mapping Lookups
+    const LABEL_MAP = {
+        'SELL_TO_OPEN': 'Short Entry',
+        'BUY_TO_OPEN': 'Long Entry',
+        'BUY_TO_CLOSE': 'Closed Out',
+        'SELL_TO_CLOSE': 'Closed Out',
+        'CALL': 'Call',
+        'PUT': 'Put',
+        'OPEN': 'Open',
+        'FILLED': 'Filled',
+        'ASSIGNED': 'Assigned',
+        'EXPIRED': 'Expired',
+        'CLOSED': 'Closed',
+        'SHORT_CALL': 'S-Call',
+        'SHORT_PUT': 'S-Put',
+        'LONG_CALL': 'L-Call',
+        'LONG_PUT': 'L-Put'
+    };
+
+    const getComputedLegRole = (type, contractType) => {
+        if (type === 'SELL_TO_OPEN' || type === 'BUY_TO_CLOSE') {
+            return `SHORT_${contractType}`; // e.g. SHORT_CALL, SHORT_PUT
+        } else {
+            return `LONG_${contractType}`;  // e.g. LONG_CALL, LONG_PUT
+        }
+    };
+
+    const getActionBadge = (type) => {
+        switch(type) {
+            case 'SELL_TO_OPEN': return '<span class="text-error ">Short</span>';
+            case 'BUY_TO_OPEN': return '<span class="text-success">Long</span>';
+            case 'BUY_TO_CLOSE': 
+            case 'SELL_TO_CLOSE': return '<span class="text-base-content/50">Closed Out</span>';
+            default: return `${type}`;
+        }
+    };
+
     // Function to format date to 'd M y' (e.g., 26 May 24)
     const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
@@ -115,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 pnl_dollar: pnl_dollar,
                 pnl_percent: pnl_percent,
                 current_premium: current_premium,
-                underlying_price: underlyingPrice
+                underlying_price: underlyingPrice,
+                leg_role: getComputedLegRole(option.type, option.contract_type)
             };
 
             if (option.option_strategy_id !== null) { // Group by strategy ID
@@ -262,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 row.innerHTML = `
                     <td class="text-center">${option.cycle_ticker}</td>
-                    <td class="text-center">${option.type} ${option.contract_type}</td>
+                    <td class="text-center">${getActionBadge(option.type)} ${LABEL_MAP[option.contract_type] || option.contract_type}</td>
                     <td class="text-center">${option.contracts}</td>
                     <td class="text-center">$${option.strike_price.toFixed(2)}</td>
                     <td class="text-center">${formatDate(option.expiration_date)}</td>
@@ -270,10 +309,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="text-center">${option.broker_name}</td>
                     <td class="text-center">$${option.premium.toFixed(2)}</td>
                     <td class="text-center">$${option.current_premium.toFixed(2)}</td>
-                    <td class="text-center">${option.option_status}</td>
+                    <td class="text-center font-bold uppercase tracking-tighter">${LABEL_MAP[option.option_status] || option.option_status}</td>
                     <td class="text-center">$${typeof option.underlying_price === 'number' ? option.underlying_price.toFixed(2) : 'N/A'}</td>
-                    <td class="text-center">N/A</td> <!-- Strategy -->
-                    <td class="text-center">N/A</td> <!-- Leg Type -->
                     <td class="text-center ${pnlClass}">$${option.pnl_dollar.toFixed(2)}</td>
                     <td class="text-center ${pnlClass}">${option.pnl_percent.toFixed(2)}%</td>
                     <td class="text-left"><div class="flex gap-1 justify-start"><button class="btn btn-xs btn-outline btn-success action-close" data-id="${option.option_id}">Close</button><button class="btn btn-xs btn-outline btn-info action-expire" data-id="${option.option_id}">Expire</button>${option.type === 'SELL_TO_OPEN' ? `<button class="btn btn-xs btn-outline btn-warning action-assign" data-id="${option.option_id}" data-broker="${option.broker_id}">Assign</button>` : ''}</div></td>
@@ -287,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // --- Step 2: The Group Header Row ---
                 const masterRow = document.createElement('tr');
-                masterRow.className = `bg-base-300/80 font-bold text-xs text-base-content ${rowClass}`;
+                masterRow.className = `bg-base-300/80 font-bold text-base text-base-content ${rowClass}`;
                 masterRow.innerHTML = `
                     <td class="text-center border-l-4 border-primary">${strategy.ticker}</td>
                     <td class="text-center font-black uppercase text-primary">${strategy.strategy_name}</td>
@@ -298,9 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="text-center">${strategy.legs[0].broker_name}</td>
                     <td class="text-center">$${(strategy.total_original_premium_for_pnl / 100).toFixed(2)}</td>
                     <td class="text-center">$${(strategy.overall_current_premium / 100).toFixed(2)}</td>
-                    <td class="text-center">${strategy.status}</td>
-                    <td class="text-center">—</td>
-                    <td class="text-center">—</td>
+                    <td class="text-center font-bold uppercase tracking-tighter">${LABEL_MAP[strategy.status] || strategy.status}</td>
                     <td class="text-center">—</td>
                     <td class="text-center ${pnlClass}">$${strategy.overall_pnl_dollar.toFixed(2)}</td>
                     <td class="text-center ${pnlClass}">${strategy.overall_pnl_percent.toFixed(2)}%</td>
@@ -315,22 +350,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     const legRowClass = leg.is_itm ? 'itm-alert' : '';
                     
                     const legRow = document.createElement('tr');
-                    legRow.className = `bg-base-200/40 text-base-content/80 text-xs italic ${legRowClass}`;
+                    legRow.className = `bg-base-200/40 text-base-content/80 text-base ${legRowClass}`;
                     
                     legRow.innerHTML = `
-                        <td class="text-center pl-4 border-l-4 border-primary/30">└─ ${leg.cycle_ticker}</td>
-                        <td class="text-center">${leg.type} ${leg.contract_type}</td>
+                        <td class="text-center pl-4 border-l-4 border-primary/30">└─ </td>
+                        <td class="text-center">${getActionBadge(leg.type)} ${LABEL_MAP[leg.contract_type] || leg.contract_type}</td>
                         <td class="text-center">${leg.contracts}</td>
                         <td class="text-center">$${leg.strike_price.toFixed(2)}</td>
                         <td class="text-center">${formatDate(leg.expiration_date)}</td>
                         <td class="text-center ${legDteClass}">${leg.dte}</td>
-                        <td class="text-center">${leg.broker_name}</td>
+                        <td class="text-center"></td>
                         <td class="text-center">$${leg.premium.toFixed(2)}</td>
                         <td class="text-center">$${leg.current_premium.toFixed(2)}</td>
-                        <td class="text-center">${leg.option_status}</td>
+                        <td class="text-center font-bold uppercase tracking-tighter">${LABEL_MAP[leg.option_status] || leg.option_status}</td>
                         <td class="text-center">$${typeof leg.underlying_price === 'number' ? leg.underlying_price.toFixed(2) : 'N/A'}</td>
-                        <td class="text-center">—</td>
-                        <td class="text-center">${leg.leg_type}</td>
                         <td class="text-center ${legPnlClass}">$${leg.pnl_dollar.toFixed(2)}</td>
                         <td class="text-center ${legPnlClass}">${leg.pnl_percent.toFixed(2)}%</td>
                         <td class="text-left">
@@ -381,7 +414,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (result.success) {
-                alert(result.message);
                 // Re-fetch and re-render dashboard data
                 await fetchMarketData();
             } else {
